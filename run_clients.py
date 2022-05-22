@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 
 from clients.fapi.s3 import S3Client
 from clients.tg.api import TgClient
+from clients.lms.api import LmsClient
 
 load_dotenv()
 
@@ -14,6 +15,13 @@ async def cli():
         up = await tg_cli.get_updates()
         print(f'getMe: {res}')
         print(f'getUpdates: {up}')
+        # await tg_cli.send_message(
+        #     chat_id=os.getenv('TELEGRAM_CHAT_ID'), text='test')
+
+    async with LmsClient(os.getenv('LMS_TOKEN')) as lms_cli:
+        await lms_cli.get_user_current()
+        await lms_cli.login(email=os.getenv('EMAIL'),
+                            password=os.getenv('PASSWORD'))
 
 
 async def s3():
