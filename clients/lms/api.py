@@ -23,9 +23,11 @@ class LmsClient(Client):
             raise LmsClientError(response=resp)
 
         try:
-            return resp, await resp.json()
+            data = await resp.json()
         except JSONDecodeError as er:
             raise LmsClientError(resp, er)
+
+        return resp, data
 
     def get_path(self, url: str) -> str:
         return f'{self.get_base_path()}{url}'
@@ -36,10 +38,10 @@ class LmsClient(Client):
             'sessionid': self.token
         }
 
-        data = await self._perform_request('get',
-                                           url=self.get_path(url),
-                                           cookies=cookies)
-        return data[1]
+        resp, data = await self._perform_request('get',
+                                                 url=self.get_path(url),
+                                                 cookies=cookies)
+        return data
 
     async def login(self, email: str, password: str) -> str:
         url = '/api/v2.user.login'
@@ -49,11 +51,11 @@ class LmsClient(Client):
             'password': password
         }
 
-        data = await self._perform_request('post', url=self.get_path(url),
-                                           json=payload)
-        str_ = data[0].headers.get('Set-Cookie')
-        if not str_:
-            raise LmsClientError(data)
+        resp, data = await self._perform_request('post', url=self.get_path(url),
+                                                 json=payload)
 
-        token = str_.split(';')[0][10:]
-        return token
+        sessionid = resp.cookies.get('sessionid')
+        if not sessionid:
+            raise LmsClientError(resp, await resp.text())
+
+        return sessionid.value
