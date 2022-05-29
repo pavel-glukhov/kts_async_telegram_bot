@@ -1,7 +1,11 @@
 import asyncio
 import os
 
+from dotenv import load_dotenv
+
 from bot import Bot, BotConfig, WorkerConfig
+
+load_dotenv()
 
 
 def run():

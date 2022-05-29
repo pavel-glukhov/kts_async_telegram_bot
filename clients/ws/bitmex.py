@@ -14,4 +14,5 @@ async def fetch_10() -> list[float]:
                 if len(result) == 10:
                     break
 
+
     return result

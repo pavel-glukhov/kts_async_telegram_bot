@@ -13,14 +13,17 @@ class TgClientError(ClientError):
 
 
 class TgClient(Client):
-    BASE_PATH = 'https://api.telegram.org/bot'
+    BASE_PATH = 'https://api.telegram.org'
 
     def __init__(self, token: str = ''):
         self.token = token
         super().__init__()
 
     def get_path(self, url: str) -> str:
-        return f'{self.get_base_path()}{self.token}/{url}'
+        return f'{self.get_base_path()}/bot{self.token}/{url}'
+
+    def get_file_path(self, url: str) -> str:
+        return f'{self.get_base_path()}/file/bot{self.token}/{url}'
 
     async def _handle_response(self, resp):
         if resp.status != 200:
@@ -30,12 +33,15 @@ class TgClient(Client):
             return resp, None
 
         try:
-            return await resp.json()
+            data = await resp.json()
+            return resp, data
+
         except JSONDecodeError as er:
             raise TgClientError(resp, er)
 
     async def get_me(self) -> dict:
-        return await self._perform_request('get', self.get_path('getMe'))
+        resp, data = await self._perform_request('get', self.get_path('getMe'))
+        return data
 
     async def get_updates(self, offset: Optional[int] = None,
                           timeout: int = 0) -> dict:
@@ -46,16 +52,15 @@ class TgClient(Client):
             request.append(f'timeout={timeout}')
 
         request_url = 'getUpdates?' + '&'.join(request)
-
-        return await self._perform_request(
+        resp, data = await self._perform_request(
             'get',
             self.get_path(request_url),
             timeout=timeout
         )
+        return data
 
-    async def get_updates_in_objects(self,
-                                     *args, **kwargs) -> List[UpdateObj]:
-        data = await self.get_updates()
+    async def get_updates_in_objects(self, *args, **kwargs) -> List[UpdateObj]:
+        data = await self.get_updates(*args, **kwargs)
 
         try:
             obj = GetUpdatesResponse.Schema().load(data)
@@ -71,9 +76,9 @@ class TgClient(Client):
             'text': text
         }
 
-        data = await self._perform_request('post',
-                                           self.get_path('sendMessage'),
-                                           json=payload)
+        resp, data = await self._perform_request('post',
+                                                 self.get_path('sendMessage'),
+                                                 json=payload)
 
         obj = SendMessageResponse.Schema().load(data=data)
 

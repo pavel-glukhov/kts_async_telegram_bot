@@ -1,29 +1,30 @@
 import asyncio
 from typing import Optional
+from clients.tg.api import TgClient
 
 
 class Poller:
     def __init__(self, token: str, queue: asyncio.Queue):
-        # обязательный параметр, в _task нужно положить запущенную корутину поллера
+        self.tg = TgClient(token)
+        self.queue = queue
+        self._is_running: bool = False
         self._task: Optional[asyncio.Task] = None
-        raise NotImplementedError
+        self.offset: int = 0
+        self.timeout: int = 60
 
     async def _worker(self):
-        """
-        нужно получать данные из tg, стоит использовать метод get_updates_in_objects
-        полученные сообщения нужно положить в очередь queue
-        в очередь queue нужно класть UpdateObj
-        """
-        raise NotImplementedError
+
+        while self._is_running:
+            kw = {'offset': self.offset, 'timeout': self.timeout}
+            messages = await self.tg.get_updates_in_objects(**kw)
+            for message in messages:
+                self.queue.put_nowait(message)
+                self.offset = message.update_id + 1
 
     def start(self):
-        """
-        нужно запустить корутину _worker
-        """
-        raise NotImplementedError
+        self._is_running = True
+        self._task = asyncio.create_task(self._worker())
 
     async def stop(self):
-        """
-        нужно отменить корутину _worker и дождаться ее отмены
-        """
-        raise NotImplementedError
+        self._is_running = False
+        self._task.cancel()

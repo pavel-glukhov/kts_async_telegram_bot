@@ -1,9 +1,10 @@
 import asyncio
 from dataclasses import dataclass
 from typing import List
-
 from clients.fapi.s3 import S3Client
-from clients.tg.dcs import UpdateObj
+from clients.fapi.tg import TgClientWithFile
+from clients.tg.api import TgClient
+from clients.tg.dcs import UpdateObj, File
 
 
 @dataclass
@@ -17,6 +18,9 @@ class WorkerConfig:
 
 class Worker:
     def __init__(self, token: str, queue: asyncio.Queue, config: WorkerConfig):
+        self.config = config
+        self.queue = queue
+        self.tg = TgClient(token)
         # обязательный параметр, в него нужно сохранить запущенные корутины воркера
         self._tasks: List[asyncio.Task] = []
         # обязательный параметр, выполнять работу с s3 нужно через объект класса self.s3
@@ -26,28 +30,40 @@ class Worker:
             aws_secret_access_key=config.aws_secret_access_key,
             aws_access_key_id=config.aws_access_key_id
         )
+        self.is_running = False
+        self.is_first_msg = True
+        self.ftg = TgClientWithFile(token)
 
     async def handle_update(self, upd: UpdateObj):
-        """
-        в этом методе должна происходить обработка сообщений и реализация бизнес-логики
-        бизнес-логика бота тестируется с помощью этого метода, файл с тестами tests.bot.test_worker::TestHandler
-        """
-        raise NotImplementedError
+        if self.is_first_msg:
+            self.is_first_msg = False
+            await self.tg.send_message(upd.message.chat.id, '[greeting]')
+
+        else:
+            if not upd.message.document:
+                await self.tg.send_message(upd.message.chat.id, '[document is required]')
+            else:
+                await self.tg.send_message(upd.message.chat.id, '[document]')
+                file = await self.ftg.get_file(upd.message.document.file_id)
+                await self.s3.stream_file(self.config.bucket, upd.message.document.file_name, file.file_path)
+                await self.tg.send_message(upd.message.chat.id, '[document has been saved]')
 
     async def _worker(self):
-        """
-        должен получать сообщения из очереди и вызывать handle_update
-        """
-        raise NotImplementedError
+        while self.is_running:
+            upd: UpdateObj = await self.queue.get()
+            await self.handle_update(upd)
+            self.queue.task_done()
 
     def start(self):
         """
         должен запустить столько воркеров, сколько указано в config.concurrent_workers
         запущенные задачи нужно положить в _tasks
         """
+        self.is_running = True
+        self._tasks = [asyncio.create_task(self._worker()) for _ in range(self.config.concurrent_workers)]
 
     async def stop(self):
-        """
-        нужно дождаться пока очередь не станет пустой (метод join у очереди), а потом отменить все воркеры
-        """
-        raise NotImplementedError
+        self.is_running = False
+        await self.queue.join()
+        for t in self._tasks:
+            t.cancel()

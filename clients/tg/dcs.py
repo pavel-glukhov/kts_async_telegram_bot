@@ -24,12 +24,26 @@ class From:
 
 
 @dataclass
+class File:
+    file_name: Optional[str]
+    mime_type: Optional[str]
+    thumb: Optional[dict]
+    file_id: str
+    file_unique_id: str
+    file_size: int
+    file_path: Optional[str]
+    duration: Optional[int]
+
+
+@dataclass
 class Message:
     message_id: int
     from_: From = field(metadata={'data_key': 'from'})
     chat: Chat
     date: int
     text: Optional[str]
+    document: Optional[File]
+    animation: Optional[File]
     entities: Optional[list]
 
 
@@ -59,11 +73,6 @@ class SendMessageResponse:
 
     class Meta:
         unknown = EXCLUDE
-
-
-@dataclass
-class File:
-    pass
 
 
 @dataclass
